@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Replacement Algorithm Visualizer</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --frame-border: #374151;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
+        p.subtitle { color: var(--text-muted); margin-bottom: 30px; font-size: 0.9rem; }
+
+        /* layout */
+        .container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        /* Controls Panel */
+        .panel {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid #333;
+        }
+
+        .control-group { margin-bottom: 20px; }
+        label { display: block; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px; }
+        
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            background: #2d2d2d;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box; /* Fix padding issues */
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .btn-secondary { background-color: #4b5563; color: white; }
+        .btn-secondary:hover { background-color: #374151; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .stat-box {
+            background: #2d2d2d;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-val { font-size: 1.2rem; font-weight: bold; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* Visualization Area */
+        .viz-area {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Reference String Strip */
+        .ref-strip {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 10px 0;
+            scrollbar-width: thin;
+        }
+        .ref-item {
+            min-width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #2d2d2d;
+            border-radius: 50%;
+            color: var(--text-muted);
+            font-weight: bold;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        .ref-item.active {
+            background: var(--primary);
+            color: white;
+            transform: scale(1.2);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        .ref-item.done { color: #555; background: #1a1a1a; }
+
+        /* Memory Frames */
+        .memory-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 40px 0;
+            min-height: 120px;
+        }
+        
+        .frame {
+            width: 80px;
+            height: 100px;
+            background: #2d2d2d;
+            border: 2px dashed var(--frame-border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* Animation States */
+        .frame.hit {
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .frame.fault {
+            border-color: var(--danger);
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            animation: shake 0.5s;
+        }
+
+        .frame.newly-added {
+            animation: popIn 0.4s ease-out;
+        }
+
+        /* Info Log */
+        .log-box {
+            background: #000;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 15px;
+            border-radius: 6px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            border-left: 4px solid var(--primary);
+        }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-hit { color: var(--success); }
+        .log-fault { color: var(--danger); }
+
+        /* Animations */
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 20px;
+            color: #666;
+            font-size: 0.8rem;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 5px;
+        }
+        .badge-lru { background: #555; color: #fff; }
+
+    </style>
+</head>
+<body>
+
+    <h1>AlgoViz <span style="color:var(--primary)">Memory</span></h1>
+    <p class="subtitle">Interactive Page Replacement Algorithm Simulator</p>
+
+    <div class="container">
+        <!-- LEFT: Controls -->
+        <div class="panel">
+            <div class="control-group">
+                <label>Algorithm</label>
+                <select id="algoSelect">
+                    <option value="FIFO">FIFO (First In First Out)</option>
+                    <option value="LRU">LRU (Least Recently Used)</option>
+                    <option value="OPTIMAL">Optimal (Look Ahead)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Number of Frames</label>
+                <input type="number" id="frameCount" value="3" min="1" max="8">
+            </div>
+
+            <div class="control-group">
+                <label>Reference String (e.g., 7 0 1 2 0)</label>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="refString" value="7 0 1 2 0 3 0 4 2 3 0 3 2">
+                    <button onclick="randomize()" style="width: auto; padding: 0 15px;" title="Randomize">🎲</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Animation Speed (<span id="speedVal">1000</span>ms)</label>
+                <input type="range" id="speedRange" min="200" max="2000" step="100" value="1000" oninput="updateSpeed()">
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" id="startBtn" onclick="startSimulation()">▶ Start</button>
+                <button class="btn-secondary" id="nextBtn" onclick="stepSimulation()" disabled>⏭ Step</button>
+            </div>
+            <button class="btn-secondary" style="background:#333; margin-top:5px;" onclick="reset()">↺ Reset</button>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-val" id="hitsVal" style="color:var(--success)">0</div>
+                    <div class="stat-label">Hits</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="faultsVal" style="color:var(--danger)">0</div>
+                    <div class="stat-label">Faults</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="ratioVal">0%</div>
+                    <div class="stat-label">Hit Ratio</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Visualization -->
+        <div class="viz-area">
+            
+            <!-- Reference Strip -->
+            <div class="panel">
+                <label>Reference Queue</label>
+                <div class="ref-strip" id="refStripDisplay">
+                    <!-- JS will populate this -->
+                    <div class="ref-item">?</div>
+                </div>
+            </div>
+
+            <!-- Main Memory -->
+            <div class="panel" style="text-align: center;">
+                <label>RAM</label>
+                <div class="memory-container" id="frameContainer">
+                    <!-- JS will populate frames -->
+                </div>
+                <h3 id="statusText" style="min-height: 24px; color: var(--primary);">Ready to start...</h3>
+            </div>
+
+            <!-- Log -->
+            <div class="log-box" id="logBox">
+                <div class="log-entry">> System Initialized. Waiting for input...</div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="footer">
+        Simulates Memory Management Logic • Built with HTML5/CSS3/JS
+    </div>
+
+    <script>
+        // --- Global State ---
+        let frames = [];
+        let references = [];
+        let maxFrames = 3;
+        let currentIndex = 0;
+        let hits = 0;
+        let faults = 0;
+        let isRunning = false;
+        let timer = null;
+        let speed = 1000;
+        
+        // --- Algorithms State ---
+        // FIFO: Queue based (frames array works naturally)
+        // LRU: Need to track usage order
+        // OPTIMAL: Need to look ahead
+        let lruTracker = []; // Stores pages in order of access (End is most recent)
+
+        // --- Initialization ---
+        function init() {
+            updateSpeed();
+            renderFrames();
+        }
+
+        function updateSpeed() {
+            speed = document.getElementById('speedRange').value;
+            document.getElementById('speedVal').innerText = speed;
+            if(isRunning) {
+                clearInterval(timer);
+                timer = setInterval(stepSimulation, speed);
+            }
+        }
+
+        function randomize() {
+            let len = 15;
+            let arr = [];
+            for(let i=0; i<len; i++) {
+                arr.push(Math.floor(Math.random() * 8)); // pages 0-7
+            }
+            document.getElementById('refString').value = arr.join(' ');
+        }
+
+        function parseInput() {
+            const raw = document.getElementById('refString').value;
+            references = raw.trim().split(/[\s,]+/).map(Number);
+            maxFrames = parseInt(document.getElementById('frameCount').value);
+            
+            // Render Input Strip
+            const strip = document.getElementById('refStripDisplay');
+            strip.innerHTML = '';
+            references.forEach((ref, idx) => {
+                const div = document.createElement('div');
+                div.className = 'ref-item';
+                div.id = `ref-${idx}`;
+                div.innerText = ref;
+                strip.appendChild(div);
+            });
+        }
+
+        function renderFrames() {
+            const container = document.getElementById('frameContainer');
+            container.innerHTML = '';
+            for(let i=0; i<maxFrames; i++) {
+                const div = document.createElement('div');
+                div.className = 'frame';
+                div.id = `frame-${i}`;
+                div.innerText = frames[i] !== undefined ? frames[i] : '-';
+                container.appendChild(div);
+            }
+        }
+
+        function log(msg, type='') {
+            const box = document.getElementById('logBox');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `> [Step ${currentIndex+1}] ${msg}`;
+            box.prepend(entry);
+        }
+
+        function reset() {
+            clearInterval(timer);
+            isRunning = false;
+            currentIndex = 0;
+            hits = 0;
+            faults = 0;
+            frames = [];
+            lruTracker = []; // Clear LRU data
+            document.getElementById('startBtn').innerText = "▶ Start";
+            document.getElementById('startBtn').classList.remove('btn-secondary');
+            document.getElementById('startBtn').classList.add('btn-primary');
+            document.getElementById('nextBtn').disabled = true;
+            document.getElementById('hitsVal').innerText = 0;
+            document.getElementById('faultsVal').innerText = 0;
+            document.getElementById('ratioVal').innerText = "0%";
+            document.getElementById('statusText').innerText = "Ready to start...";
+            document.getElementById('refStripDisplay').innerHTML = '<div class="ref-item">?</div>';
+            document.getElementById('logBox').innerHTML = '<div class="log-entry">> Reset complete.</div>';
+            renderFrames();
+        }
+
+        function startSimulation() {
+            if(isRunning) {
+                // Pause logic
+                clearInterval(timer);
+                isRunning = false;
+                document.getElementById('startBtn').innerText = "▶ Resume";
+                return;
+            }
+
+            if(currentIndex === 0) parseInput();
+            
+            isRunning = true;
+            document.getElementById('startBtn').innerText = "⏸ Pause";
+            document.getElementById('nextBtn').disabled = false;
+            
+            timer = setInterval(stepSimulation, speed);
+        }
+
+        function updateStats() {
+            document.getElementById('hitsVal').innerText = hits;
+            document.getElementById('faultsVal').innerText = faults;
+            const total = hits + faults;
+            const ratio = total === 0 ? 0 : Math.round((hits / total) * 100);
+            document.getElementById('ratioVal').innerText = `${ratio}%`;
+        }
+
+        // --- CORE LOGIC ---
+        function stepSimulation() {
+            if (currentIndex >= references.length) {
+                clearInterval(timer);
+                isRunning = false;
+                document.getElementById('statusText').innerText = "Simulation Complete";
+                document.getElementById('startBtn').innerText = "Restart";
+                document.getElementById('startBtn').onclick = reset;
+                return;
+            }
+
+            const algo = document.getElementById('algoSelect').value;
+            const page = references[currentIndex];
+            
+            // Highlight current ref
+            document.querySelectorAll('.ref-item').forEach(el => el.classList.remove('active'));
+            const refEl = document.getElementById(`ref-${currentIndex}`);
+            if(refEl) refEl.classList.add('active');
+            if(currentIndex > 0) document.getElementById(`ref-${currentIndex-1}`).classList.add('done');
+
+            // Reset frame visuals
+            document.querySelectorAll('.frame').forEach(el => {
+                el.className = 'frame'; // remove hit/fault classes
+            });
+
+            // LOGIC
+            let hitIndex = frames.indexOf(page);
+            let statusMsg = "";
+            let logType = "";
+
+            if (hitIndex !== -1) {
+                // --- HIT ---
+                hits++;
+                statusMsg = `Page ${page} found in Frame ${hitIndex}`;
+                logType = "log-hit";
+                
+                const frameEl = document.getElementById(`frame-${hitIndex}`);
+                frameEl.classList.add('hit');
+
+                // Algo Specific Maintenance on Hit
+                if (algo === 'LRU') {
+                    // Move page to end of tracker
+                    lruTracker = lruTracker.filter(p => p !== page);
+                    lruTracker.push(page);
+                    statusMsg += " (Updated LRU position)";
+                }
+
+            } else {
+                // --- FAULT/MISS ---
+                faults++;
+                logType = "log-fault";
+                let replaceIndex = -1;
+
+                if (frames.length < maxFrames) {
+                    // Memory has space
+                    frames.push(page);
+                    replaceIndex = frames.length - 1;
+                    statusMsg = `Loaded ${page} into Empty Frame ${replaceIndex}`;
+                    
+                    if(algo === 'LRU') lruTracker.push(page);
+
+                } else {
+                    // Replacement Needed
+                    if (algo === 'FIFO') {
+                        replaceIndex = 0; // FIFO removes head
+                        const victim = frames.shift(); // Remove first
+                        frames.push(page); // Add to end (conceptually for queue display)
+                        // Note: For visual stability in grid, we usually just replace the slot.
+                        // But simple FIFO usually implies a circular queue or shifting. 
+                        // To keep visuals stable, let's just find the "oldest" by an index pointer 
+                        // or simpler: Standard FIFO replaces index (faults % frames) if using circular, 
+                        // OR shifts the array. Let's use Array Shift for strict FIFO behavior visual.
+                        // However, to make it look like "frames", we can just replace the logic:
+                        // Let's reload frames strictly based on FIFO queue.
+                        statusMsg = `FIFO: Replaced ${victim} with ${page}`;
+
+                    } else if (algo === 'LRU') {
+                        // Victim is the first element in lruTracker
+                        const victim = lruTracker[0];
+                        replaceIndex = frames.indexOf(victim);
+                        frames[replaceIndex] = page;
+                        
+                        // Update Tracker
+                        lruTracker.shift(); // remove victim
+                        lruTracker.push(page); // add new
+                        statusMsg = `LRU: Replaced ${victim} (Least Recent) with ${page}`;
+
+                    } else if (algo === 'OPTIMAL') {
+                        // Look ahead
+                        let furthestDist = -1;
+                        let victim = -1;
+
+                        // Check each page currently in frames
+                        for(let fPage of frames) {
+                            // Find next occurrence in ref string
+                            const futureRefs = references.slice(currentIndex + 1);
+                            const nextIndex = futureRefs.indexOf(fPage);
+                            
+                            if (nextIndex === -1) {
+                                // Not used again, ideal victim
+                                victim = fPage;
+                                break;
+                            }
+                            
+                            if (nextIndex > furthestDist) {
+                                furthestDist = nextIndex;
+                                victim = fPage;
+                            }
+                        }
+                        
+                        replaceIndex = frames.indexOf(victim);
+                        frames[replaceIndex] = page;
+                        statusMsg = `OPT: Replaced ${victim} (Not needed for ${furthestDist === -1 ? 'forever' : furthestDist + ' steps'})`;
+                    }
+                }
+
+                // If we did a replacement or fill, animate it
+                // For strict FIFO visual shift, we might need to re-render all.
+                // But for this grid visual, let's keep it simple.
+                // Exception: If strict FIFO array shift was done above, we re-render whole container.
+                if (algo === 'FIFO' && frames.length >= maxFrames && hitIndex === -1) {
+                   // FIFO logic above did shift/push.
+                   // Re-render required to match array order
+                   renderFrames();
+                   // Highlight the last one as new
+                   const last = document.getElementById(`frame-${maxFrames-1}`);
+                   if(last) {
+                       last.classList.add('fault', 'newly-added');
+                   }
+                } else {
+                    // Update specific frame for LRU/OPT or filling empty
+                    const el = document.getElementById(`frame-${replaceIndex}`);
+                    if(el) {
+                        el.innerText = page;
+                        el.classList.add('fault', 'newly-added');
+                    }
+                }
+            }
+
+            document.getElementById('statusText').innerText = statusMsg;
+            log(statusMsg, logType);
+            updateStats();
+
+            currentIndex++;
+            
+            // Scroll ref strip
+            const strip = document.getElementById('refStripDisplay');
+            if(currentIndex > 2) {
+                strip.scrollLeft = (currentIndex - 2) * 50; 
+            }
+        }
+
+        // Initialize on Load
+        init();
+
+    </script>
+</body>
+</html> 
